@@ -4,6 +4,7 @@ using OrchardCore.ContentManagement.Metadata;
 using OrchardCore.ContentManagement.Metadata.Settings;
 using OrchardCore.ContentManagement.Records;
 using OrchardCore.Data.Migration;
+using YesSql.Sql;
 
 namespace OrchardCore.Autoroute
 {
@@ -22,11 +23,11 @@ namespace OrchardCore.Autoroute
                 .Attachable()
                 .WithDescription("Provides a custom url for your content item."));
 
-            SchemaBuilder.CreateMapIndexTable(nameof(AutoroutePartIndex), table => table
+            SchemaBuilder.CreateMapIndexTable<AutoroutePartIndex>(table => table
                 .Column<string>("ContentItemId", c => c.WithLength(26))
                 .Column<string>("ContainedContentItemId", c => c.WithLength(26))
                 .Column<string>("JsonPath", c => c.Unlimited())
-                .Column<string>("Path", col => col.WithLength(AutoroutePartDisplay.MaxPathLength))
+                .Column<string>("Path", col => col.WithLength(AutoroutePart.MaxPathLength))
                 .Column<bool>("Published")
                 .Column<bool>("Latest")
             );

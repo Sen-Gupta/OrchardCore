@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Text.Encodings.Web;
 using System.Threading.Tasks;
 using Fluid;
 using Microsoft.AspNetCore.Authorization;
@@ -45,6 +46,7 @@ namespace OrchardCore.Lucene.Controllers
         private readonly IContentDefinitionManager _contentDefinitionManager;
         private readonly ISiteService _siteService;
         private readonly dynamic New;
+        private readonly JavaScriptEncoder _javaScriptEncoder;
         private readonly IStringLocalizer S;
         private readonly IHtmlLocalizer H;
         private readonly ILogger _logger;
@@ -63,6 +65,7 @@ namespace OrchardCore.Lucene.Controllers
             INotifier notifier,
             ISiteService siteService,
             IShapeFactory shapeFactory,
+            JavaScriptEncoder javaScriptEncoder,
             IStringLocalizer<AdminController> stringLocalizer,
             IHtmlLocalizer<AdminController> htmlLocalizer,
             ILogger<AdminController> logger)
@@ -81,6 +84,7 @@ namespace OrchardCore.Lucene.Controllers
             _siteService = siteService;
 
             New = shapeFactory;
+            _javaScriptEncoder = javaScriptEncoder;
             S = stringLocalizer;
             H = htmlLocalizer;
             _logger = logger;
@@ -88,6 +92,11 @@ namespace OrchardCore.Lucene.Controllers
 
         public async Task<ActionResult> Index(AdminIndexViewModel model, PagerParameters pagerParameters)
         {
+            if (!await _authorizationService.AuthorizeAsync(User, Permissions.ManageIndexes))
+            {
+                return Forbid();
+            }
+
             model.Indexes = (await _luceneIndexSettingsService.GetSettingsAsync()).Select(i => new IndexViewModel { Name = i.IndexName });
 
             var siteSettings = await _siteService.GetSiteSettingsAsync();
@@ -353,14 +362,18 @@ namespace OrchardCore.Lucene.Controllers
                     templateContext.SetValue(parameter.Key, parameter.Value);
                 }
 
-                var tokenizedContent = await _liquidTemplateManager.RenderAsync(model.DecodedQuery, System.Text.Encodings.Web.JavaScriptEncoder.Default);
+                var tokenizedContent = await _liquidTemplateManager.RenderAsync(model.DecodedQuery, _javaScriptEncoder);
 
                 try
                 {
                     var parameterizedQuery = JObject.Parse(tokenizedContent);
-                    var docs = await _queryService.SearchAsync(context, parameterizedQuery);
-                    model.Documents = docs.TopDocs.ScoreDocs.Select(hit => searcher.Doc(hit.Doc)).ToList();
-                    model.Count = docs.Count;
+                    var luceneTopDocs = await _queryService.SearchAsync(context, parameterizedQuery);
+
+                    if (luceneTopDocs != null)
+                    {
+                        model.Documents = luceneTopDocs.TopDocs.ScoreDocs.Select(hit => searcher.Doc(hit.Doc)).ToList();
+                        model.Count = luceneTopDocs.Count;
+                    }
                 }
                 catch (Exception e)
                 {
